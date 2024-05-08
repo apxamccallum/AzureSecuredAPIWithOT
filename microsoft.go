@@ -3,6 +3,7 @@ package main
 import (
 	"AzureSecuredAPIWithOT/helpers/pages"
 	"AzureSecuredAPIWithOT/logger"
+	"context"
 	"encoding/json"
 	"net/http"
 	"net/url"
@@ -40,6 +41,9 @@ func handleLogin(w http.ResponseWriter, r *http.Request, oauthConf *oauth2.Confi
 	URL, err := url.Parse(oauthConf.Endpoint.AuthURL)
 	if err != nil {
 		logger.Log.Error("Parse: " + err.Error())
+		w.WriteHeader(http.StatusInternalServerError)
+		w.Write([]byte("Internal Server Error"))
+		return
 	}
 	logger.Log.Info(URL.String())
 	parameters := url.Values{}
@@ -49,9 +53,9 @@ func handleLogin(w http.ResponseWriter, r *http.Request, oauthConf *oauth2.Confi
 	parameters.Add("response_type", "code")
 	parameters.Add("state", oauthStateString)
 	URL.RawQuery = parameters.Encode()
-	url := URL.String()
-	logger.Log.Info(url)
-	http.Redirect(w, r, url, http.StatusTemporaryRedirect)
+	authUrl := URL.String()
+	logger.Log.Info(authUrl)
+	http.Redirect(w, r, authUrl, http.StatusTemporaryRedirect)
 }
 
 func CallBackFromMicrosoft(w http.ResponseWriter, r *http.Request) {
@@ -75,11 +79,11 @@ func CallBackFromMicrosoft(w http.ResponseWriter, r *http.Request) {
 		if reason == "user_denied" {
 			w.Write([]byte("User has denied Permission.."))
 		}
-		// User has denied access..
+		// User has denied access...
 		// http.Redirect(w, r, "/", http.StatusTemporaryRedirect)
 	} else {
 
-		token, err := oauthConfMs.Exchange(oauth2.NoContext, code)
+		token, err := oauthConfMs.Exchange(context.Background(), code)
 		if err != nil {
 			logger.Log.Error("oauthConfMs.Exchange() failed with " + err.Error() + "\n")
 			return
@@ -95,7 +99,7 @@ func CallBackFromMicrosoft(w http.ResponseWriter, r *http.Request) {
 			HttpOnly: false,
 		})
 
-		tokenjson, err := json.Marshal(token)
+		tokenJson, err := json.Marshal(token)
 		if err != nil {
 			logger.Log.Error("Error in Marshalling the token")
 		}
@@ -103,14 +107,14 @@ func CallBackFromMicrosoft(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "text/html; charset=utf-8")
 		w.WriteHeader(http.StatusOK)
 		w.Write([]byte(pages.CallBackHeaderPage))
-		w.Write(tokenjson)
+		w.Write(tokenJson)
 		w.Write([]byte(pages.CallBackFooterPage))
 
 	}
 
 }
 
-func ProtectedRoute(w http.ResponseWriter, r *http.Request) {
+func ProtectedRoute(w http.ResponseWriter, _ *http.Request) {
 	w.Write([]byte(pages.SecureArea))
 }
 

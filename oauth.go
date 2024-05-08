@@ -98,7 +98,7 @@ func validateTokenAndScope(tokenStr string) (*jwt.Token, error) {
 			return nil, fmt.Errorf("invalid issuer: expected %s, got %s", expectedIssuer, claims.Issuer)
 		}
 
-		// Validate audience
+		// Validate audience,
 		// Audience can be either a single string or an array of strings
 		expectedAudience := viper.GetString("expectedaudience")
 		validAudience := false

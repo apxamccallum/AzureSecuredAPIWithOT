@@ -11,7 +11,7 @@ var (
 )
 
 /*
-InitializeZapCustomLogger Funtion initializes a logger using uber-go/zap package in the application.
+InitializeZapCustomLogger Function initializes a logger using uber-go/zap package in the application.
 */
 func InitializeZapCustomLogger() {
 	conf := zap.Config{
