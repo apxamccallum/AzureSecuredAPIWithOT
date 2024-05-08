@@ -6,12 +6,14 @@ import (
 	"AzureSecuredAPIWithOT/logger"
 	"crypto/rsa"
 	"fmt"
+	"log"
+	"net/http"
+	"strings"
+
 	"github.com/golang-jwt/jwt"
 	"github.com/lestrrat-go/jwx/jwa"
 	"github.com/lestrrat-go/jwx/jwk"
 	"github.com/spf13/viper"
-	"log"
-	"net/http"
 )
 
 func main() {
@@ -53,24 +55,48 @@ func middleware(next http.HandlerFunc) http.HandlerFunc {
 }
 
 func extractToken(r *http.Request) string {
+	token := cookieToken(r)
+	if token == "" {
+		return headerToken(r)
+	}
+
+	return token
+}
+
+func cookieToken(r *http.Request) string {
 	accessCookie, err := r.Cookie("access_token")
 	if err != nil {
 		return ""
 	}
 
-	bearToken := accessCookie.Value
+	return accessCookie.Value
+}
 
-	return bearToken
+func headerToken(r *http.Request) string {
+	authHeader := r.Header.Get("Authorization")
+
+	parts := strings.Split(authHeader, " ")
+	if len(parts) != 2 || parts[0] != "Bearer" {
+		return ""
+	}
+
+	return parts[1]
 }
 
 func verifyToken(r *http.Request) (*jwt.Token, error) {
 	tokenString := extractToken(r)
+	if tokenString == "" {
+		return nil, fmt.Errorf("no token provided")
+	}
 
-	keySet, err := jwk.Fetch(r.Context(), "https://login.microsoftonline.com/common/discovery/v2.0/keys")
+	keySet, err := jwk.Fetch(r.Context(), viper.GetString("issuer"))
+	if err != nil {
+		return nil, fmt.Errorf("could not fetch JWK: %v", err)
+	}
 
 	token, err := jwt.Parse(tokenString, func(token *jwt.Token) (interface{}, error) {
 		if token.Method.Alg() != jwa.RS256.String() {
-			return nil, fmt.Errorf("Unexpected signing method: %v", token.Header["alg"])
+			return nil, fmt.Errorf("unexpected signing method: %v", token.Header["alg"])
 		}
 		kid, ok := token.Header["kid"].(string)
 		if !ok {
@@ -81,7 +107,7 @@ func verifyToken(r *http.Request) (*jwt.Token, error) {
 		if !ok {
 			return nil, fmt.Errorf("key %v not found", kid)
 		}
-		
+
 		publickey := &rsa.PublicKey{}
 		err = keys.Raw(publickey)
 		if err != nil {
@@ -92,7 +118,7 @@ func verifyToken(r *http.Request) (*jwt.Token, error) {
 	})
 
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("jwt.Parse(): %w", err)
 	}
 	return token, nil
 }

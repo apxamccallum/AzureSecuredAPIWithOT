@@ -4,18 +4,19 @@ import (
 	"AzureSecuredAPIWithOT/helpers/pages"
 	"AzureSecuredAPIWithOT/logger"
 	"encoding/json"
-	"github.com/spf13/viper"
-	"golang.org/x/oauth2"
-	"golang.org/x/oauth2/microsoft"
 	"net/http"
 	"net/url"
 	"strings"
 	"time"
+
+	"github.com/spf13/viper"
+	"golang.org/x/oauth2"
+	"golang.org/x/oauth2/microsoft"
 )
 
 var (
 	oauthConfMs = &oauth2.Config{
-		Scopes: []string{"api://bfee93bf-32a7-4793-bfe0-7e052aa5d85c/access_as_user"},
+		Scopes: viper.GetStringSlice("scopes"),
 	}
 	oauthStateStringMs = ""
 )
