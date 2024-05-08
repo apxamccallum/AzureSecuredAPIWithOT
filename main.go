@@ -4,15 +4,12 @@ import (
 	"AzureSecuredAPIWithOT/configs"
 	"AzureSecuredAPIWithOT/helpers/pages"
 	"AzureSecuredAPIWithOT/logger"
-	"crypto/rsa"
 	"fmt"
 	"log"
 	"net/http"
 	"strings"
 
-	"github.com/golang-jwt/jwt"
-	"github.com/lestrrat-go/jwx/jwa"
-	"github.com/lestrrat-go/jwx/jwk"
+	"github.com/golang-jwt/jwt/v4"
 	"github.com/spf13/viper"
 )
 
@@ -90,33 +87,7 @@ func verifyToken(r *http.Request) (*jwt.Token, error) {
 		return nil, fmt.Errorf("no token provided")
 	}
 
-	keySet, err := jwk.Fetch(r.Context(), viper.GetString("microsoft.jwkurl"))
-	if err != nil {
-		return nil, fmt.Errorf("could not fetch JWK: %v", err)
-	}
-
-	token, err := jwt.Parse(tokenString, func(token *jwt.Token) (interface{}, error) {
-		if token.Method.Alg() != jwa.RS256.String() {
-			return nil, fmt.Errorf("unexpected signing method: %v", token.Header["alg"])
-		}
-		kid, ok := token.Header["kid"].(string)
-		if !ok {
-			return nil, fmt.Errorf("kid header not found")
-		}
-
-		keys, ok := keySet.LookupKeyID(kid)
-		if !ok {
-			return nil, fmt.Errorf("key %v not found", kid)
-		}
-
-		publickey := &rsa.PublicKey{}
-		err = keys.Raw(publickey)
-		if err != nil {
-			return nil, fmt.Errorf("could not parse pubkey")
-		}
-
-		return publickey, nil
-	})
+	token, err := validateTokenAndScope(tokenString)
 
 	if err != nil {
 		return nil, fmt.Errorf("jwt.Parse(): %w", err)

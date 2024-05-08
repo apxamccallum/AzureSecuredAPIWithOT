@@ -1,0 +1,13 @@
+port: 3000
+logger-output-path: "./output/file.txt"
+
+oauthStateString: "thisshouldberandom"
+
+clientID: "00000000-0000-0000-0000-000000000000"
+clientSecret: "secret"
+tenant: "00000000-0000-0000-0000-000000000000"
+api: "api://00000000-0000-0000-0000-000000000000/"
+scope: "Status.Read"
+jwkurl: "https://login.microsoftonline.com/00000000-0000-0000-0000-000000000000/discovery/v2.0/keys"
+expectedissuer: "https://sts.windows.net/00000000-0000-0000-0000-000000000000/"
+expectedaudience: "api://00000000-0000-0000-0000-000000000000"

@@ -20,10 +20,10 @@ var (
 )
 
 func InitializeOAuthMicrosoft() {
-	oauthConfMs.Scopes = viper.GetStringSlice("microsoft.scopes")
-	oauthConfMs.ClientID = viper.GetString("microsoft.clientID")
-	oauthConfMs.ClientSecret = viper.GetString("microsoft.clientSecret")
-	oauthConfMs.Endpoint = microsoft.AzureADEndpoint(viper.GetString("microsoft.tenant"))
+	oauthConfMs.Scopes = []string{viper.GetString("api") + viper.GetString("scope")}
+	oauthConfMs.ClientID = viper.GetString("clientID")
+	oauthConfMs.ClientSecret = viper.GetString("clientSecret")
+	oauthConfMs.Endpoint = microsoft.AzureADEndpoint(viper.GetString("tenant"))
 	oauthStateStringMs = viper.GetString("oauthStateString")
 }
 
