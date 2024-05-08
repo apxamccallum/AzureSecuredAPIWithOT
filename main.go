@@ -47,6 +47,7 @@ func middleware(next http.HandlerFunc) http.HandlerFunc {
 		if err != nil {
 			w.WriteHeader(http.StatusUnauthorized)
 			w.Write([]byte(pages.UnAuthorizedPage))
+			logger.Log.Info(err.Error())
 			return
 		}
 
@@ -89,7 +90,7 @@ func verifyToken(r *http.Request) (*jwt.Token, error) {
 		return nil, fmt.Errorf("no token provided")
 	}
 
-	keySet, err := jwk.Fetch(r.Context(), viper.GetString("jwkurl"))
+	keySet, err := jwk.Fetch(r.Context(), viper.GetString("microsoft.jwkurl"))
 	if err != nil {
 		return nil, fmt.Errorf("could not fetch JWK: %v", err)
 	}
