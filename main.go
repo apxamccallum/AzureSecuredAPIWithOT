@@ -89,7 +89,7 @@ func verifyToken(r *http.Request) (*jwt.Token, error) {
 		return nil, fmt.Errorf("no token provided")
 	}
 
-	keySet, err := jwk.Fetch(r.Context(), viper.GetString("issuer"))
+	keySet, err := jwk.Fetch(r.Context(), viper.GetString("jwkurl"))
 	if err != nil {
 		return nil, fmt.Errorf("could not fetch JWK: %v", err)
 	}
