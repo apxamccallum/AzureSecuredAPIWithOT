@@ -4,16 +4,20 @@ import (
 	"AzureSecuredAPIWithOT/helpers/pages"
 	"AzureSecuredAPIWithOT/logger"
 	"context"
+	"crypto/rand"
+	"encoding/base64"
 	"encoding/json"
 	"net/http"
-	"net/url"
 	"strings"
 	"time"
 
+	"github.com/gorilla/sessions"
 	"github.com/spf13/viper"
 	"golang.org/x/oauth2"
 	"golang.org/x/oauth2/microsoft"
 )
+
+var store = sessions.NewCookieStore([]byte("your-secret-key"))
 
 var (
 	oauthConfMs        = &oauth2.Config{}
@@ -38,40 +42,39 @@ func HandleMicrosoftLogin(w http.ResponseWriter, r *http.Request) {
 }
 
 func handleLogin(w http.ResponseWriter, r *http.Request, oauthConf *oauth2.Config, oauthStateString string) {
-	URL, err := url.Parse(oauthConf.Endpoint.AuthURL)
-	if err != nil {
-		logger.Log.Error("Parse: " + err.Error())
-		w.WriteHeader(http.StatusInternalServerError)
-		w.Write([]byte("Internal Server Error"))
-		return
-	}
-	logger.Log.Info(URL.String())
-	parameters := url.Values{}
-	parameters.Add("client_id", oauthConf.ClientID)
-	parameters.Add("scope", strings.Join(oauthConf.Scopes, " "))
-	parameters.Add("redirect_uri", oauthConf.RedirectURL)
-	parameters.Add("response_type", "code")
-	parameters.Add("state", oauthStateString)
-	URL.RawQuery = parameters.Encode()
-	authUrl := URL.String()
+	// Generate and store state in session
+	state := generateState()
+	session, _ := store.Get(r, "oauth-session")
+	session.Values["state"] = state
+	session.Save(r, w)
+
+	// Generate a new verifier
+	verifier := oauth2.GenerateVerifier()
+	session.Values["verifier"] = verifier
+	session.Save(r, w)
+
+	// Generate the authorization URL with the stored state and verifier
+	authUrl := oauthConf.AuthCodeURL(state, oauth2.AccessTypeOffline, oauth2.S256ChallengeOption(verifier))
 	logger.Log.Info(authUrl)
+
+	// Redirect user to the authorization URL
 	http.Redirect(w, r, authUrl, http.StatusTemporaryRedirect)
 }
 
 func CallBackFromMicrosoft(w http.ResponseWriter, r *http.Request) {
 	logger.Log.Info("Callback-ms..")
+	session, _ := store.Get(r, "oauth-session")
 
-	state := r.FormValue("state")
-	logger.Log.Info(state)
-	if state != oauthStateStringMs {
+	state, _ := session.Values["state"].(string)
+
+	requestState := r.FormValue("state")
+	if requestState != state {
 		logger.Log.Info("invalid oauth state, expected " + oauthStateStringMs + ", got " + state + "\n")
 		http.Redirect(w, r, "/", http.StatusTemporaryRedirect)
 		return
 	}
 
 	code := r.FormValue("code")
-	logger.Log.Info(code)
-
 	if code == "" {
 		logger.Log.Warn("Code not found..")
 		w.Write([]byte("Code Not Found to provide AccessToken..\n"))
@@ -79,38 +82,38 @@ func CallBackFromMicrosoft(w http.ResponseWriter, r *http.Request) {
 		if reason == "user_denied" {
 			w.Write([]byte("User has denied Permission.."))
 		}
+		return
 		// User has denied access...
 		// http.Redirect(w, r, "/", http.StatusTemporaryRedirect)
-	} else {
-
-		token, err := oauthConfMs.Exchange(context.Background(), code)
-		if err != nil {
-			logger.Log.Error("oauthConfMs.Exchange() failed with " + err.Error() + "\n")
-			return
-		}
-		logger.Log.Info("TOKEN>> AccessToken>> " + token.AccessToken)
-		logger.Log.Info("TOKEN>> Expiration Time>> " + token.Expiry.String())
-		logger.Log.Info("TOKEN>> RefreshToken>> " + token.RefreshToken)
-
-		http.SetCookie(w, &http.Cookie{
-			Name:     "access_token",
-			Value:    token.AccessToken,
-			Expires:  time.Now().Add(time.Hour * 24),
-			HttpOnly: false,
-		})
-
-		tokenJson, err := json.Marshal(token)
-		if err != nil {
-			logger.Log.Error("Error in Marshalling the token")
-		}
-
-		w.Header().Set("Content-Type", "text/html; charset=utf-8")
-		w.WriteHeader(http.StatusOK)
-		w.Write([]byte(pages.CallBackHeaderPage))
-		w.Write(tokenJson)
-		w.Write([]byte(pages.CallBackFooterPage))
-
 	}
+
+	verifier, _ := session.Values["verifier"].(string)
+	token, err := oauthConfMs.Exchange(context.Background(), code, oauth2.VerifierOption(verifier))
+	if err != nil {
+		logger.Log.Error("oauthConfMs.Exchange() failed with " + err.Error() + "\n")
+		return
+	}
+	logger.Log.Info("TOKEN>> AccessToken>> " + token.AccessToken)
+	logger.Log.Info("TOKEN>> Expiration Time>> " + token.Expiry.String())
+	logger.Log.Info("TOKEN>> RefreshToken>> " + token.RefreshToken)
+
+	http.SetCookie(w, &http.Cookie{
+		Name:     "access_token",
+		Value:    token.AccessToken,
+		Expires:  time.Now().Add(time.Hour * 24),
+		HttpOnly: false,
+	})
+
+	tokenJson, err := json.Marshal(token)
+	if err != nil {
+		logger.Log.Error("Error in Marshalling the token")
+	}
+
+	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	w.WriteHeader(http.StatusOK)
+	w.Write([]byte(pages.CallBackHeaderPage))
+	w.Write(tokenJson)
+	w.Write([]byte(pages.CallBackFooterPage))
 
 }
 
@@ -127,4 +130,13 @@ func LogoutRoute(writer http.ResponseWriter, request *http.Request) {
 	}
 	http.SetCookie(writer, cookie)
 	http.Redirect(writer, request, "/", http.StatusTemporaryRedirect)
+}
+
+func generateState() string {
+	b := make([]byte, 16) // Generates a random 16-byte state
+	_, err := rand.Read(b)
+	if err != nil {
+		return "" // Handle error appropriately
+	}
+	return base64.URLEncoding.EncodeToString(b)
 }
